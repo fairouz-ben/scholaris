@@ -1,0 +1,64 @@
+
+Scaffolding (6 files)
+
+composer.json (Filament 5, spatie/laravel-permission, spatie/laravel-activitylog, barryvdh/laravel-dompdf, Pest)
+app/Http/Middleware/SetLocale.php
+app/Models/Concerns/HasBilingualName.php (a name accessor that picks name_ar or name_fr)
+lang/ar/*.php and lang/fr/*.php
+resources/views/layouts/portal.blade.php (RTL-aware)
+app/Providers/Filament/AdminPanelProvider.php
+
+Migrations (about 22, in dependency order)
+
+Structure: foundations, faculties, departments, domaines, filieres, specialites
+Levels: cycles, cycle_levels, domaine_levels, specialite_levels
+Calendar: academic_years, terms, academic_year_terms, holidays, yearly_holidays, academic_calendar_events
+Canvas: canvas, canvas_terms, unite_ens_types, canvas_units, canvas_modules
+departments.head_teacher_id is added in a later migration, once teachers exists (circular dependency).
+
+Enums in app/Enums: EntityStatus, Language, TermType, HolidayCategory, CanvasKind.
+
+Models (one per table) with the relationships from the file, plus a Canvas::amendments() and parent() pair.
+
+Services
+
+CanvasTotalsService derives weekly CM/TD/TP/atelier minutes and VHS (weekly × total_weeks) per module, unit and semester. This matches the 378h total in your PDF.
+CanvasValidationService checks that unit credits and coefficients equal the sum of their modules, and that amendment modules belong to the parent canvas.
+
+Filament resources: Cycle, Specialite, AcademicYear, Canvas (with nested units and modules), Holiday.
+------------------------
+
+php artisan make:request StoreFacultyRequest
+by Form Request validation (companion)
+app/Http/Requests/StoreFacultyRequest.php
+
+
+
+
+
+php artisan make:command GenerateDomainEnums
+
+php artisan enums:generate
+
+That creates app/Console/Commands/GenerateDomainEnums.php. Replace its contents with:
+
+cd scolaris && git init && git add . && git commit -m "Fresh Laravel"
+
+composer create-project laravel/laravel project-name
+
+
+#in .env for laravel 
+CACHE_DRIVER=file
+SESSION_DRIVER=file
+
+docker exec -it laravel_app bash
+
+
+docker compose exec app php artisan make:model Foundation -m
+
+
+php artisan make:model Term -m
+php artisan make:model AcademicYearTerm -m
+php artisan make:model Holiday -m
+php artisan make:model YearlyHoliday -m
+php artisan make:model AcademicCalendarEvent -m

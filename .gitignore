@@ -1,0 +1,24 @@
+# Laravel specific
+src_laravel/vendor/
+src_laravel/node_modules/
+src_laravel/.env
+src_laravel/.phpunit.result.cache
+src_laravel/public/hot
+src_laravel/public/storage
+src_laravel/storage/*.key
+mysql_data/
+.DS_Store
+
+.env
+.env.backup
+.phpunit.result.cache
+
+# Docker & IDE
+docker-compose.override.yml
+.docker/
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

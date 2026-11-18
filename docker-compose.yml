@@ -1,0 +1,53 @@
+services:
+  app:
+    build: 
+      context: ./docker/php
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+   # image: laravel13-php85-apache
+    container_name: laravel_app
+    restart: unless-stopped
+   
+    volumes:
+      - ./src_laravel:/var/www/html
+      - ./docker/php/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
+    environment:
+      APACHE_DOCUMENT_ROOT: /var/www/html/public
+    depends_on:
+      db:
+        condition: service_healthy
+
+
+  db:
+    image: mysql:9.7
+    container_name: laravel_db
+    restart: unless-stopped
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_DATABASE: laravel
+      MYSQL_ROOT_PASSWORD: root_secret
+      MYSQL_USER: laravel_user
+      MYSQL_PASSWORD: laravel_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/zz-custom.cnf:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot_secret"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: laravel_pma
+    environment:
+      PMA_HOST: db
+      UPLOAD_LIMIT: 100M    # Add this line, for large database
+    ports:
+      - "8083:80"
+    depends_on:
+      - db
+volumes:
+  mysql_data:
