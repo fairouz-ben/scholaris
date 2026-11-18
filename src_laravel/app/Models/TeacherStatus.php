@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TeacherStatus extends Model
 {
+    protected  $table = 'teacher_status';
+
      protected $fillable = [
         'is_active',
         'name_ar',

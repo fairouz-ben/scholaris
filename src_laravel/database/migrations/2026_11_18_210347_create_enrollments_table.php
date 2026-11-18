@@ -12,7 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('enrollments', function (Blueprint $table) {
-             $table->foreignId('student_id')->constrained('students')->restrictOnDelete();
+            $table->id();
+            $table->foreignId('student_id')->constrained('students')->restrictOnDelete();
             $table->foreignId('academic_year_id')->constrained('academic_years')->restrictOnDelete();
             $table->foreignId('cycle_level_id')->constrained('cycle_levels')->restrictOnDelete();
             $table->foreignId('section_id')->nullable()->constrained('sections')->nullOnDelete();
@@ -21,7 +22,6 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['student_id', 'academic_year_id']);
-       
         });
     }
 

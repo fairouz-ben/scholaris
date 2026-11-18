@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Speciality_level extends Model
 {
-      protected $fillable = [
-        'specialite_id',
+    protected $fillable = [
+        'speciality_id',
         'cycle_level_id',
         'status',
     ];
