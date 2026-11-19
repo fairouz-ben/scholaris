@@ -38,36 +38,17 @@ trait CreatesTimetableFixtures
 
     private ?TeacherStatus $teacherStatus = null;
 
-    protected function makeTeacher(): Teacher
+    /** @var array<string, mixed> */
+    private array $context = [];
+
+    /** @var array<string, Schedule> */
+    private array $schedules = [];
+
+    protected function makeTeacher(string $contract = 'permanent'): Teacher
     {
         $n = ++$this->sequence;
 
-        $this->department ??= Department::create([
-            'faculty_id' => Faculty::create([
-                'foundation_id'    => Foundation::create(['name_ar' => 'جامعة', 'name_fr' => 'Université'])->id,
-                'name_ar'          => 'كلية العلوم',
-                'name_fr'          => 'Faculté des Sciences',
-                'default_language' => 'fr',
-            ])->id,
-            'name_ar' => 'قسم',
-            'name_fr' => 'Département',
-        ]);
-
-        $this->grade ??= Grade::create([
-            'name_ar'          => 'أستاذ',
-            'name_fr'          => 'Professeur',
-            'code_ar'          => 'prof',
-            'code_fr'          => 'prof',
-            'priority'         => 10,
-            'can_teach_cm'     => true,
-            'priority_for_uef' => true,
-        ]);
-
-        $this->teacherStatus ??= TeacherStatus::create([
-            'is_active' => true,
-            'name_ar'   => 'نشط',
-            'name_fr'   => 'Actif(ve)',
-        ]);
+        $this->ensureOrganisation();
 
         return Teacher::create([
             'department_id'     => $this->department->id,
@@ -80,7 +61,7 @@ trait CreatesTimetableFixtures
             'password'          => 'secret-password',
             'teacher_status_id' => $this->teacherStatus->id,
             'grade_id'          => $this->grade->id,
-            'contract_type'     => 'permanent',
+            'contract_type'     => $contract,
         ]);
     }
 
@@ -100,10 +81,18 @@ trait CreatesTimetableFixtures
         ]);
     }
 
-    /** Builds the full chain (year, term, canvas, module, section, room, slot, schedule) and one planned occurrence. */
-    protected function makeOccurrence(?Teacher $teacher = null): SessionOccurrence
+    /**
+     * Shared academic chain (year, term, canvas, module, section, room, category), built once per test.
+     *
+     * @return array<string, mixed>
+     */
+    protected function timetableContext(): array
     {
-        $teacher ??= $this->makeTeacher();
+        if ($this->context !== []) {
+            return $this->context;
+        }
+
+        $this->ensureOrganisation();
 
         $year = AcademicYear::create([
             'label'      => '2026-2027',
@@ -141,7 +130,7 @@ trait CreatesTimetableFixtures
         ]);
 
         $canvas = Canvas::create([
-            'reference'      => 'CAN-' . $this->sequence,
+            'reference'      => 'CAN-TEST',
             'name_ar'        => 'تحليل وعلوم المعطيات',
             'name_fr'        => 'Analyse et Sciences de Données',
             'canvas_year'    => '2026-2027',
@@ -179,59 +168,116 @@ trait CreatesTimetableFixtures
             'exam_percent'       => 60,
         ]);
 
-        $section = Section::create([
-            'academic_year_id' => $year->id,
-            'canvas_id'        => $canvas->id,
-            'name'             => 'A',
-        ]);
+        return $this->context = [
+            'year'     => $year,
+            'yearTerm' => $yearTerm,
+            'module'   => $module,
+            'section'  => Section::create([
+                'academic_year_id' => $year->id,
+                'canvas_id'        => $canvas->id,
+                'name'             => 'A',
+            ]),
+            'room' => Room::create([
+                'department_id' => $this->department->id,
+                'type'          => 'cm',
+                'name'          => 'Amphi 1',
+                'capacity'      => 200,
+            ]),
+            'category' => SessionCategory::create([
+                'code'    => 'ord',
+                'name_ar' => 'حصة عادية',
+                'name_fr' => 'Ordinaire',
+            ]),
+        ];
+    }
 
-        $room = Room::create([
-            'department_id' => $this->department->id,
-            'type'          => 'cm',
-            'name'          => 'Amphi 1',
-            'capacity'      => 200,
-        ]);
+    /** Weekly schedule of a teacher for a session type code: cm (ratio 1), td (1.5) or tp (2), each in its own 90-minute slot. */
+    protected function makeSchedule(Teacher $teacher, string $code = 'cm'): Schedule
+    {
+        $key = "{$teacher->id}:{$code}";
 
-        $sessionType = SessionType::create([
-            'code'              => 'cm',
-            'name_ar'           => 'محاضرة',
-            'name_fr'           => 'Cours',
-            'hours_per_cm_hour' => 1,
-        ]);
+        if (isset($this->schedules[$key])) {
+            return $this->schedules[$key];
+        }
 
-        $category = SessionCategory::create([
-            'code'    => 'ord',
-            'name_ar' => 'حصة عادية',
-            'name_fr' => 'Ordinaire',
-        ]);
+        $context = $this->timetableContext();
 
-        $slot = TimeSlot::create([
-            'code'       => 'S1',
-            'start_time' => '08:00:00',
-            'end_time'   => '09:30:00',
-            'position'   => 1,
-        ]);
+        [$ratio, $slotCode, $start, $end] = match ($code) {
+            'cm'    => [1, 'S1', '08:00:00', '09:30:00'],
+            'td'    => [1.5, 'S2', '09:30:00', '11:00:00'],
+            'tp'    => [2, 'S3', '11:00:00', '12:30:00'],
+        };
 
-        $schedule = Schedule::create([
-            'academic_year_term_id' => $yearTerm->id,
-            'canvas_module_id'      => $module->id,
-            'section_id'            => $section->id,
+        $sessionType = SessionType::firstOrCreate(
+            ['code' => $code],
+            ['name_ar' => $code, 'name_fr' => $code, 'hours_per_cm_hour' => $ratio],
+        );
+
+        $slot = TimeSlot::firstOrCreate(
+            ['code' => $slotCode],
+            ['start_time' => $start, 'end_time' => $end, 'position' => (int) substr($slotCode, 1)],
+        );
+
+        return $this->schedules[$key] = Schedule::create([
+            'academic_year_term_id' => $context['yearTerm']->id,
+            'canvas_module_id'      => $context['module']->id,
+            'section_id'            => $context['section']->id,
             'teacher_id'            => $teacher->id,
-            'room_id'               => $room->id,
+            'room_id'               => $context['room']->id,
             'session_type_id'       => $sessionType->id,
-            'session_category_id'   => $category->id,
+            'session_category_id'   => $context['category']->id,
             'day_of_week'           => 1,
             'time_slot_id'          => $slot->id,
             'week_pattern'          => 'every',
             'start_date'            => '2026-09-13',
         ]);
+    }
+
+    protected function makeOccurrence(
+        ?Teacher $teacher = null,
+        string $date = '2026-10-05',
+        OccurrenceStatusEnum $status = OccurrenceStatusEnum::PLANNED,
+        ?Schedule $schedule = null,
+    ): SessionOccurrence {
+        $teacher ??= $this->makeTeacher();
+        $schedule ??= $this->makeSchedule($teacher);
 
         return SessionOccurrence::create([
             'schedule_id' => $schedule->id,
-            'date'        => '2026-10-05',
-            'status'      => OccurrenceStatusEnum::PLANNED,
+            'date'        => $date,
+            'status'      => $status,
             'teacher_id'  => $teacher->id,
-            'room_id'     => $room->id,
+            'room_id'     => $schedule->room_id,
+        ]);
+    }
+
+    private function ensureOrganisation(): void
+    {
+        $this->department ??= Department::create([
+            'faculty_id' => Faculty::create([
+                'foundation_id'    => Foundation::create(['name_ar' => 'جامعة', 'name_fr' => 'Université'])->id,
+                'name_ar'          => 'كلية العلوم',
+                'name_fr'          => 'Faculté des Sciences',
+                'default_language' => 'fr',
+            ])->id,
+            'name_ar' => 'قسم',
+            'name_fr' => 'Département',
+        ]);
+
+        $this->grade ??= Grade::create([
+            'name_ar'          => 'أستاذ',
+            'name_fr'          => 'Professeur',
+            'code_ar'          => 'prof',
+            'code_fr'          => 'prof',
+            'priority'         => 10,
+            'can_teach_cm'     => true,
+            'priority_for_uef' => true,
+        ]);
+
+        $this->teacherStatus ??= TeacherStatus::create([
+            'is_active' => true,
+            'name_ar'   => 'نشط',
+            'name_fr'   => 'Actif(ve)',
         ]);
     }
 }
